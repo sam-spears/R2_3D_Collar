@@ -2,24 +2,28 @@ import cv2
 import numpy as np
 import imutils
 
-imgRaw = cv2.imread("Resources/straight_norm.jpg")
-template = cv2.imread("Resources/Picture.jpg")
-head_out = cv2.imread("Resources/head_outline.jpg")
+main_path = '/Users/dionisios/src/face_matcher/'
 
-# percent by which the image is resized
+imgRaw = cv2.imread(main_path+"Resources/Straight_norm.jpg")
+template = cv2.imread(main_path+"Resources/Picture.jpg")
+head_out = cv2.imread(main_path+"Resources/head_outline.jpg")
+
+# Percent by which the image is resized
 scale_percent = 20
-# calculate the percentage of original dimensions
+# Calculate the percentage of original dimensions
 width = int(imgRaw.shape[1] * scale_percent / 100)
 height = int(imgRaw.shape[0] * scale_percent / 100)
-# adjust image
+# Adjust image
 dsize = (width, height)
 imgAdj = cv2.resize(imgRaw, dsize)
 
+# Convert to greyscale, blur, apply Canny edge detection and invert colour
 imgGrey = cv2.cvtColor(imgRaw, cv2.COLOR_BGR2GRAY)
 imgBlur = cv2.GaussianBlur(imgGrey, (5, 5), 0)
 imgCanny = cv2.Canny(imgBlur, 50, 150)
 invCanny = cv2.bitwise_not(imgCanny)
 
+# Flip the template image horizontally (left-to-right)
 templateFlip = cv2.flip(template, 1)
 
 counter = 0
@@ -75,22 +79,35 @@ def getTemplateKpts(event, x, y, flags, params):
         counter1 = counter1 + 1
         print(temRefPt)
 
+# Call the Haar cascade classifier with a pre-trainer profile face model
 face_cascade = cv2.CascadeClassifier("Resources/haarcascade_profileface.xml")
 
+# Apply face detection with the Haar cascade classifier
 faces = face_cascade.detectMultiScale(imgGrey, 1.1, 5)
 
-roi = []
-
+# For each face detected, draw a rectangle around it and get the Region Of Interest (ROI) from the inverse Canny
 for (x, y, w, h) in faces:
     cv2.rectangle(imgGrey, (x, y), (x + w, y + h), (255, 255, 255), 2)
     print(x, y, w, h)
     roi = invCanny[y - 200:y + (h + 200), x:x + (w + 300)]
 
+
 def alignImages(image, template, debug=True):
+    """Matches the keypoints of the image and template
+
+    Args:
+        image ([np.array]): Main image
+        template (np.array): Template
+        debug (bool, optional): [description]. Defaults to True.
+
+    Returns:
+        [type]: [description]
+    """
 
     image = image
     template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
 
+    # Make named windows for our ROI and template and set mouse call backs for adding points
     cv2.namedWindow("ROI")
     cv2.setMouseCallback("ROI", getImageKpts)
 
@@ -100,8 +117,8 @@ def alignImages(image, template, debug=True):
     imgpts = []
     tempts = []
 
+    # Begin while loop awaiting mouse input on windows
     while True:
-
         if counter == 6:
             imgpts = np.float32([imgRefPt[0], imgRefPt[1], imgRefPt[2], imgRefPt[3], imgRefPt[4], imgRefPt[5]])
             tempts = np.float32([temRefPt[0], temRefPt[1], temRefPt[2], temRefPt[3], temRefPt[4], temRefPt[5]])
@@ -117,18 +134,19 @@ def alignImages(image, template, debug=True):
         if key == ord("c"):
             break
 
-    #turn points into keypoints
-
+    # Turn points into keypoints
     pts1 = [cv2.KeyPoint(imgpts[0][0], imgpts[0][1], 1), cv2.KeyPoint(imgpts[1][0], imgpts[1][1], 1), cv2.KeyPoint(imgpts[2][0], imgpts[2][1], 1),
              cv2.KeyPoint(imgpts[3][0], imgpts[3][1], 1), cv2.KeyPoint(imgpts[4][0], imgpts[4][1], 1), cv2.KeyPoint(imgpts[5][0], imgpts[5][1], 1)]
 
     pts2 = [cv2.KeyPoint(tempts[0][0], tempts[0][1], 1), cv2.KeyPoint(tempts[1][0], tempts[1][1], 1), cv2.KeyPoint(tempts[2][0], tempts[2][1], 1),
              cv2.KeyPoint(tempts[3][0], tempts[3][1], 1), cv2.KeyPoint(tempts[4][0], tempts[4][1], 1), cv2.KeyPoint(tempts[5][0], tempts[5][1], 1)]
 
+    # Create ORB object and compute descriptors of the keypoints
     orb = cv2.ORB_create(6)
     (kpts1, des1) = orb.compute(image, pts1)
     (kpts2, des2) = orb.compute(template, pts2)
 
+    # Create a Brute-Force Matcher, to match keypoints between image and template
     matcher = cv2.BFMatcher()
     matches = matcher.match(des1, des2, None)
     matches = sorted(matches, key=lambda x: x.distance)
@@ -222,7 +240,7 @@ def overlay_transparent(background, overlay, x, y):
 
     return background
 
-
+# Our main image is now the ROI inverse Canny image, while the main tepmlate is the inverse template
 image = roi
 template = templateFlip
 
